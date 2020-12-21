@@ -1,0 +1,35 @@
+digraph Topology {
+    rankdir="LR";
+    splines=ortho
+    subgraph cluster_2 {
+        node[style=filled];
+        graph [fontname = "helvetica"];
+        APIServer[label="API Server", shape=box, color="#008cff", fontname = "helvetica"]
+        Scheduler [label= "Scheduler", shape=box, color="#008cff", fontname = "helvetica"]
+        etcd[label= "etcd", shape=box, color="#008cff", fontname = "helvetica"]
+        label = "Control Plane"
+        labeljust= "l"
+        color="#819abb"
+        style=filled
+
+    }
+
+    subgraph cluster_1 {
+        
+        node[style=filled]
+        fontname = "helvetica"
+        Exporter [label= "Exporter", shape=box, color="#008cff", fontname = "helvetica"]
+        kubelet [label= "Kubelet", shape=box, color="#008cff", fontname = "helvetica"]
+        label = "Node"
+        labeljust= "l"
+        color="#819abb"
+        style=filled
+       
+    }
+
+    Exporter -> kubelet[taillabel = "1", labeldistance=5, labelangle=-10 fontname = "helvetica"]
+    Exporter -> APIServer [taillabel = "2" , labeldistance=5 labelangle=10 fontname = "helvetica" constraint=false];
+    kubelet -> APIServer [taillabel="3", labelangle=20, labeldistance=2 fontname = "helvetica", constraint=false];
+    Scheduler -> APIServer[label="4, 5", fontname = "helvetica"]
+    APIServer-> etcd[label="6", fontname = "helvetica"]
+}
