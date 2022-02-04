@@ -3,9 +3,15 @@
 ## who is part of this working group?
 
 The main contributors and maintainers of this working group are:
-- ...
+- Alexey Perelov (@AlexeyPerelov)
+- Artyom Lukianov (@cyneoco3hahue)
+- Francesco Romani (@fromanirh)
+- Swati Sehgal (@swatisehgal)
+- Talor Itzhak (@Tal-or)
 
 please check the git logs to track every contribution.
+
+ NOTE: This is a working group in the general, english sense of the word ["working group"](https://en.wikipedia.org/wiki/Working_group) defined as "A group of experts working together to achieve specified goals" and not a official Kubenetes working group. While we want to cooperate with Kubenetes, we don't have official endorsement or acknowledgement.
 
 ## what is the purpose of this organization?
 
@@ -27,3 +33,20 @@ We *do not* plan to keep permanent forks or to maintain components under this or
 ## what does this repository contain?
 
 This repository contain generic documentation which doesn't belong to specific repositories, maybe because, like this README, covers the organization, or because covers general topics.
+
+## Community, discussion, contribution, and support
+
+You can reach the maintainers of this project at:
+
+- Slack: [#topology-aware-scheduling](https://kubernetes.slack.com/archives/C012XSGFZQE)
+
+Additional information:
+- Meeting Notes and Agenda doc: [here](https://docs.google.com/document/d/1p7ULfHtOEATZpftED2Y4turSGaCAK4wao2IBzFqxcZY/edit)
+- Meeting Recordings: [here](https://www.youtube.com/playlist?list=PL8yo4AhklaI8S7Zr7rJP3vKPdtIOvtUYZ)
+
+You can find instructions how to configure Topology aware Scheduling [here](install-guides/README.md).
+
+# Code of conduct
+
+Learn how to engage with the Kubernetes community on the [community page](http://kubernetes.io/community/).
+Participation in the Kubernetes community is governed by the [Kubernetes Code of Conduct](code-of-conduct.md).

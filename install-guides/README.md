@@ -1,10 +1,10 @@
-# Resource Topology Scheduling Installation
+# Topology Aware Scheduling Installation
 
-This guide will walk through the process of installing Resource Topology Aware Scheduling on a single-node Kubernetes cluster.
+This guide will walk through the process of installing Resource Topology Aware Scheduling using all the upstream components on a Kubernetes cluster.
 
 ## Prerequisites
 The following are required:
-- Single-node Kubernetes cluster of 1.21 or higher installed with kubeadm. Note: kubeadm installation isn't a prerequisite for Topology Aware Scheduling, but assumptions on configuration of Kubernetes components are made in this guide that rely on Kubeadm being the installation mechanism.
+- A Kubernetes cluster of 1.23 or higher installed with kubeadm. Note: kubeadm installation isn't a prerequisite for Topology Aware Scheduling, but assumptions on configuration of Kubernetes components are made in this guide that rely on Kubeadm being the installation mechanism.
 - Untainted master node in cluster.(`kubectl taint nodes $(kubectl get nodes -o=jsonpath='{.items[0].metadata.name}') node-role.kubernetes.io/master:NoSchedule-`) 
 - Go 1.15+ on the system where components are to be built
 
@@ -29,9 +29,12 @@ In kubeadm these variables can be set in a file that sits in
 KUBELET_EXTRA_ARGS=\
 --cpu-manager-policy=static \
 ---reserved-cpus=0 \
---topology-manager-policy=single-numa-node \
---feature-gates="TopologyManager=true,KubeletPodResourcesGetAllocatable=true"
+--topology-manager-policy=single-numa-node
+```
+NOTE: KubeletPodResourcesGetAllocatable feature gate is enabled by default starting with Kubernetes 1.23. If Kubernetes version <1.23 is being used please enable the appropriate feature gates in the kubelet arguments like below:
 
+```
+--feature-gates="KubeletPodResourcesGetAllocatable=true"
 ```
 
 The next step is to remove the kubelet cpu checkpoint and restart the service.
@@ -46,20 +49,18 @@ systemctl restart kubelet
 To check that the above has take effect run `systemctl status kubelet` and review the arguments passed to kubelet. The above args, including topology manager and cpu manager policies, should now be in place.
 
 ### Install Topology Exporter
-In Kubernetes 1.21 a number of enhancements have been made to the Kubelet [to support Topology Scheduling](https://github.com/kubernetes/website/blob/64ef8768ab9ae25a5338a95225a80ac90423473f/content/en/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins.md#monitoring-device-plugin-resources). These changes are enabled by the feature flag 'KubeletPodResourcesGetAllocatableTrue' and expose information about device topology on a gRPC service running locally on each node. A Resource Topology Exporter can then be used in order to read this information and make it available in the Kubernetes API.
+In Kubernetes 1.21 a number of enhancements have been made to the Kubelet [to support Topology Scheduling](https://github.com/kubernetes/website/blob/64ef8768ab9ae25a5338a95225a80ac90423473f/content/en/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins.md#monitoring-device-plugin-resources). These changes have enabled to expose information about device topology on a gRPC service running locally on each node. A topology exporter can then be used to read this information and expose resources per numa node to the Kubernetes API via a CR corresponding to each node.
 
-The Resource Topology Exporter is part of Node Feature Discovery. It reads information from the Kubelet's endpoint and creates a representation of the Kubernetes node as a result.
-Note: With the development branch only resources in a specified namespace are being watched. The current config watches resources in the ["rte" namespace](https://github.com/k8stopologyawareschedwg/node-feature-discovery/blob/topology-updater-implementation/manifests/nfd-daemonset-master-topology-updater.yaml.template#L109).
+The nfd-topology exporter is a software component in Node Feature Discovery that reads information from the Kubelet's endpoint and creates a representation of the Kubernetes node as a result.
 
-To install Node Feature Discovery from the [development branch](https://github.com/kubernetes-sigs/node-feature-discovery/pull/525):
+<!---TODO: Document steps to capture how ResourceTopology Exporter can be used as a Topology Exporter--->
+
+To install Node Feature Discovery:
 
 ```
-git clone https://github.com/k8stopologyawareschedwg/node-feature-discovery.git
+git clone https://github.com/kubernetes-sigs/node-feature-discovery.git
 cd node-feature-discovery
-git checkout topology-updater-implementation 
-make image
-kubectl apply -f  manifests/noderesourcetopologies.yaml
-kubectl apply -f manifests/nfd-daemonset-master-topology-updater.yaml
+kubectl apply -k deployment/overlays/topologyupdater/
 ```
 
 Once Node Feature discovery is up and running it should begin reporting on the resources per numa node for the node.
@@ -69,11 +70,11 @@ To see these descriptions run:
 kubectl describe  noderesourcetopologies
 ```
 
-### Install Topology Aware Scheduler
+### Install Topology Aware Scheduler plugin
 
 At this point our kubelet is exposing information about resource Topology and our Node Feature Discovery agent is making this information available in the Kubernetes API. The next step is to schedule based on the per-node resource topology information.
 
-Node Resource Topology Scheduling is currently enabled in the [community sponsored scheduler plugins repo](https://github.com/kubernetes-sigs/scheduler-plugins/tree/release-1.19).  The image from the scheduler plugins repo has all of the scheduling power of the Kubernetes core scheduler with some added useful plugins - like Resource Topology Scheduling - built in on top.
+Node Resource Topology Scheduling is currently enabled in the [community sponsored scheduler plugins repo](https://github.com/kubernetes-sigs/scheduler-plugins/tree/release-1.19). The image from the scheduler plugins repo has all of the scheduling power of the Kubernetes core scheduler with some added useful plugins - like Resource Topology Scheduling - built in on top.
 You can read more about the Node Resource Topology Scheduler [here](https://github.com/kubernetes-sigs/scheduler-plugins/blob/master/pkg/noderesourcetopology/README.md)
 
 ```
@@ -82,10 +83,16 @@ cd scheduler-plugins
 ```
 Before deploying the image field in manifests/noderesourcetopology/deploy.yaml needs to be updated with:
 
+```
+image: k8s.gcr.io/scheduler-plugins/kube-scheduler:v0.21.6
+```
+NOTE:
+- [NodeResourceTopology](https://github.com/k8stopologyawareschedwg/noderesourcetopology-api) version [v0.0.12](https://github.com/k8stopologyawareschedwg/noderesourcetopology-api/tree/v0.0.12) onwards, CRD has been changed from namespace to cluster scoped. 
+Scheduler plugin version > v0.21.6 depends on NodeResourceTopology CRD v0.0.12 and the namespace field has been deprecated from the NodeResourceTopology scheduler config args.
 
-```
-image: k8s.gcr.io/scheduler-plugins/kube-scheduler:v0.19.9
-```
+Dependency:
+- Scheduler plugin version <= v0.21.6 depends on the [NodeResourceTopology](https://github.com/k8stopologyawareschedwg/noderesourcetopology-api) CRD version [v0.0.10](https://github.com/k8stopologyawareschedwg/noderesourcetopology-api/tree/v0.0.10).  
+- Scheduler plugin version > v0.21.6 depends on the [NodeResourceTopology](https://github.com/k8stopologyawareschedwg/noderesourcetopology-api) CRD version [v0.0.12](https://github.com/k8stopologyawareschedwg/noderesourcetopology-api/tree/v0.0.12).
 
 Now the manifests can be applied with:
 ```
@@ -103,7 +110,7 @@ To deploy a scheduler with Resource Topology Scheduling capabilities we can repl
 To deploy the scheduler run `vim /etc/kubernetes/manifests/kube-scheduler.yaml` to open the deployment manifest. Locate the image field and replace the line with:
 
 ` 
-image: k8s.gcr.io/scheduler-plugins/kube-scheduler:v0.19.9
+image: k8s.gcr.io/scheduler-plugins/kube-scheduler:v0.21.6
 `
 The configmap that configures the scheduler plugins will have to be mounted to the main kube scheduler - similar to the mounting operation in the [scheduler plugins deploy.yaml file](https://raw.githubusercontent.com/kubernetes-sigs/scheduler-plugins/master/manifests/noderesourcetopology/deploy.yaml)
 
@@ -134,59 +141,3 @@ Warning  FailedScheduling  38s (x11 over 13m)  single-numa-node-scheduler  0/1 n
 
 Note that the components in Topology Aware Scheduling are still under active development. If anything in this guide doesn't work as expected please open an issue on the repo describing your problem along with details about your environment.
 
-## Topology Scheduling on multiple nodes
-The above demonstrates how to use Resource Topology Scheduling on a single node cluster. To expand the above to multiple nodes the modified kubelet will need to be installed and configured on each node in the cluster. The topology exporter can then be run on each node through NFD. Scheduling will be performed based on Topology across all nodes where applicable.
-
- 
-### Component developer versions
-As development of Topology Aware Scheduling continues features will likely be enabled out of tree before being merged into Kubernetes repositories. Below shows the target repos for development and the methods for deploying these out of tree versions.
-
-#### Kubelet
-There exist a number of experimental Kubelet branches which enable features that support Topology Aware Scheduling. To build and deploy these custom Kubelet builds from branch $BRANCHNAME:
-
-
-```
-git clone https://github.com/kubernetes/kubernetes
-cd kubernetes
-git checkout $BRANCHNAME 
-make clean && make WHAT=cmd/kubelet
-```
-
-Once kubelet has build successfully we'll need to replace the kubelet on our system with the version we've just built. To do so we're going to simply swap out the binary and restart the service:
-
-```
-mv _output/bin/kubelet /usr/bin/
-
-systemctl restart kubelet
-```
-
-Once kubelet is successfully restarted - this can be seen with `systemctl status kubelet` check if the new version of kubelet is load with:
-
-```
-kubectl get nodes
-```
-
-The version number of the output should be altered to look something like:
-
-```
-silpixa00399863   Ready    master   66m   v1.18.0-alpha.1.9389+521ee88a0f3142-dirty
-```
-
-
-#### Node Feature Discovery
-The guide above uses an out of tree build of Node Feature Discovery.
-
-#### Kube Scheduler
-
-```
-git clone https://github.com/k8stopologyawareschedwg/scheduler-plugins 
-cd scheduler-plugins
-git checkout TopologyAwareSchedulerPerNUMA
-make local-image
-``` 
-Now that the scheduler is up and running we can deploy it by running:
-```
-kubectl apply -f manifests/noderesourcetopology/cluster-role.yaml 
-kubectl apply -f manifests/noderesourcetopology/scheduler-configmap.yaml
-kubectl apply -f manifests/noderesourcetopology/deploy.yaml
-```
