@@ -28,14 +28,48 @@ In kubeadm these variables can be set in a file that sits in
 ```
 KUBELET_EXTRA_ARGS=\
 --cpu-manager-policy=static \
----reserved-cpus=0 \
+--reserved-cpus=0 \
+--memory-manager-policy=Static \
+--kube-reserved=memory=memory=512Mi \
+--system-reserved=memory=512Mi \
+--eviction-hard=memory.available<100Mi \
+--reserved-memory 0:memory=1124Mi \
 --topology-manager-policy=single-numa-node
 ```
-NOTE: KubeletPodResourcesGetAllocatable feature gate is enabled by default starting with Kubernetes 1.23. If Kubernetes version <1.23 is being used please enable the appropriate feature gates in the kubelet arguments like below:
+
+In case kind is being used for cluster setup, here is an example of a kind config:
 
 ```
---feature-gates="KubeletPodResourcesGetAllocatable=true"
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+kubeadmConfigPatches:
+- |
+  kind: KubeletConfiguration
+  cgroupDriver: "cgroupfs"
+  cpuManagerPolicy: "static"
+  topologyManagerPolicy: "single-numa-node"
+  reservedSystemCPUs: "0"
+  memoryManagerPolicy: "Static"
+  systemReserved: {"memory" :"512Mi"}
+  kubeReserved: {"memory" :"512Mi"}
+  evictionHard: {"memory.available": "100Mi"}
+  reservedMemory: [{"numaNode": 0, "limits": {"memory": "1124Mi"}}]
+nodes:
+- role: control-plane
+  image: kindest/node:v1.23.0@sha256:49824ab1727c04e56a21a5d8372a402fcd32ea51ac96a2706a12af38934f81ac
+- role: worker
+  image: kindest/node:v1.23.0@sha256:49824ab1727c04e56a21a5d8372a402fcd32ea51ac96a2706a12af38934f81ac
+
 ```
+NOTE:
+1. For more information on how to configure kubelet arguments, refer to official Kubernetes documentation:
+    * [CPU Manager](https://kubernetes.io/docs/tasks/administer-cluster/cpu-management-policies/), [Memory Manager](https://kubernetes.io/docs/tasks/administer-cluster/memory-manager/) and [Topology Manager](https://kubernetes.io/docs/tasks/administer-cluster/topology-manager/)
+    * [Reserve compute resources for system daemons](https://kubernetes.io/docs/tasks/administer-cluster/reserve-compute-resources/)
+1. KubeletPodResourcesGetAllocatable feature gate is enabled by default starting with Kubernetes 1.23. If Kubernetes version <1.23 is being used please enable the appropriate feature gates in the kubelet arguments like below:
+
+    ```
+    --feature-gates="KubeletPodResourcesGetAllocatable=true"
+    ```
 
 The next step is to remove the kubelet cpu checkpoint and restart the service.
 
